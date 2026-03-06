@@ -1,0 +1,43 @@
+name: IPA Black Auto-Signer
+on:
+  schedule:
+    - cron: '0 */2 * * *' # يعمل كل ساعتين تلقائياً
+  workflow_dispatch: # زر للتشغيل اليدوي
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install zsign
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsign
+
+      - name: Sign IPAs with 5 Certs
+        run: |
+          mkdir -p signed_ipas
+          # القوائم
+          APPS=("dns" "esign" "ksign" "gbox" "fether" "scarlet" "certs")
+          CERTS=("cert1" "cert2" "cert3" "cert4" "cert5")
+
+          for app in "${APPS[@]}"; do
+            if [ -f "ipas/${app}.ipa" ]; then
+              for cert in "${CERTS[@]}"; do
+                if [ -f "certs/${cert}.p12" ]; then
+                  echo "Signing ${app} with ${cert}..."
+                  zsign -k "certs/${cert}.p12" -p "" -m "certs/${cert}.mobileprovision" "ipas/${app}.ipa" -o "signed_ipas/${app}_${cert}.ipa"
+                fi
+              done
+            fi
+          done
+
+      - name: Deploy to Cloudflare & GitHub
+        run: |
+          git config --global user.name "IPA-Black-Bot"
+          git config --global user.email "bot@ipablack.com"
+          git add signed_ipas/
+          git commit -m "Auto-renewed IPAs: $(date)" || exit 0
+          git push
